@@ -1,0 +1,16 @@
+{
+    "name": "EventShop Dev",
+    "dockerComposeFile": ["../docker-compose.yml"],
+    "service": "web",
+    "workspaceFolder": "/workspace",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "mtxr.sqltools",
+                "mxtr.sqltools-driver-pg"
+            ]
+        }
+    }
+}
