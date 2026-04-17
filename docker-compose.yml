@@ -24,5 +24,22 @@ services:
     depends_on:
       - db
   
+  generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python scripts/generator.py
+    volumes:
+      - .:/workspace
+    depends_on:
+      - web
+  
+  metabase:
+    image: metabase/metabase:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
 volumes:
   postgres_data:

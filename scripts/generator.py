@@ -4,7 +4,7 @@ import time
 import uuid
 import json
 
-API_URL = "http://localhost:8000/api/events/"
+API_URL = "http://web:8000/api/events/"
 
 # 가상 유저 풀 생성
 USER_IDS = [str(uuid.uuid4()) for _ in range(100)]
