@@ -1,0 +1,16 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "db",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "EventShop DB",
+            "group": "db",
+            "database": "event_db",
+            "username": "event_user",
+            "password": "event_password_dummy"
+        }
+    ]
+}
