@@ -83,7 +83,7 @@ CREATE INDEX idx_events_user_id    ON events(user_id);
 ```sql
 SELECT
     event_type,
-    COUNT(*)                                      AS count,
+    COUNT(*)                                           AS count,
     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
 FROM events
 GROUP BY event_type
@@ -98,9 +98,9 @@ SELECT
         WHEN (payload->>'product_id')::int >= 5000 THEN '한정판'
         ELSE '일반'
     END AS product_type,
-    COUNT(*)                                       AS order_count,
-    SUM((payload->>'price')::numeric)              AS total_revenue,
-    AVG((payload->>'price')::numeric)              AS avg_price
+    COUNT(*)                              AS order_count,
+    SUM((payload->>'price')::numeric)     AS total_revenue,
+    AVG((payload->>'price')::numeric)     AS avg_price
 FROM events
 WHERE event_type IN ('purchase', 'purchase_limited')
 GROUP BY product_type;
@@ -160,3 +160,54 @@ Metabase(http://localhost:3000)에서 위 쿼리를 기반으로 아래 3개의 
 │   └── analysis.sql         # 집계 분석 쿼리
 └── README.md
 ```
+
+---
+
+## 선택 과제 B — AWS 아키텍처 설계
+
+본 파이프라인(이벤트 생성 → 저장 → 시각화)을 프로덕션 환경에서 운영한다고 가정했을 때의 AWS 아키텍처입니다.
+
+### 아키텍처 구성도
+
+```mermaid
+graph TD
+    Generator["🖥️ Event Generator\nPython Script"]
+    User["👤 User / Client"]
+
+    subgraph VPC["Amazon VPC"]
+        subgraph PublicSubnet["Public Subnet"]
+            EC2_API["Amazon EC2\nDjango API Server"]
+            EC2_BI["Amazon EC2\nMetabase (BI Tool)"]
+        end
+
+        subgraph PrivateSubnet["Private Subnet"]
+            RDS[("Amazon RDS\nPostgreSQL — event_db")]
+        end
+    end
+
+    CW["Amazon CloudWatch\n로그 및 지표 수집"]
+    Analyst["📊 Admin / Analyst"]
+
+    User -- "POST /api/events" --> EC2_API
+    Generator -- "POST /api/events" --> EC2_API
+    EC2_API -- "INSERT logs" --> RDS
+    RDS -. "SQL Query" .-> EC2_BI
+    EC2_BI -- "Dashboard View" --> Analyst
+    EC2_API -- "App Logs / Metrics" --> CW
+    RDS -- "DB Metrics" --> CW
+```
+
+### 사용 서비스 및 선택 이유
+
+| 서비스 | 역할 | 선택 이유 |
+|---|---|---|
+| **Amazon EC2** | Django API 서버 및 Metabase 구동 | 현재 Docker 기반 구성을 그대로 이식할 수 있고, 인스턴스 타입 변경으로 유연하게 스케일업 가능 |
+| **Amazon RDS (PostgreSQL)** | 이벤트 로그 영구 저장 | 자동 백업, Multi-AZ 고가용성, 보안 패치 등 DB 운영 부담을 AWS에 위임(Managed Service) 가능 |
+| **Amazon VPC** | 네트워크 격리 | Public/Private Subnet을 분리해 RDS를 외부에 직접 노출하지 않고 보안 강화 |
+| **Amazon CloudWatch** | 로그 및 지표 중앙 수집 | EC2와 RDS의 이상 징후를 한 곳에서 모니터링하고 알림 설정 가능 |
+
+### 설계에서 가장 고민한 부분 — 컴퓨팅과 스토리지의 역할 분리
+
+초기에는 EC2 하나에 Django, Metabase, PostgreSQL을 모두 올리는 방식을 고려했습니다. 구성이 단순하고 비용도 저렴하지만, 이벤트 로그가 지속적으로 쌓이는 파이프라인 특성상 스토리지 포화나 메모리 누수가 발생하면 DB와 애플리케이션이 함께 다운되는 단일 장애점(SPOF)이 생긴다는 문제가 있었습니다.
+
+이를 해결하기 위해 컴퓨팅(EC2)과 스토리지(RDS)를 물리적으로 분리했습니다. API 서버에 장애가 생겨도 적재된 로그 데이터는 RDS에 안전하게 보존되고, 트래픽 급증 시 서버와 DB를 독립적으로 확장할 수 있습니다. 또한 RDS를 Private Subnet에 배치해 외부에서 직접 접근할 수 없도록 하고, CloudWatch로 두 리소스를 함께 모니터링함으로써 운영 가시성도 확보했습니다.
